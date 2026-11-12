@@ -2,6 +2,7 @@
 # at the top level (old scripts, paper sources, local data) is ignored.
 /*
 !/.gitignore
+!/.github/
 !/LICENSE
 !/README.md
 !/README_pypi.md
