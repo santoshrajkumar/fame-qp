@@ -1,0 +1,29 @@
+# Only the entries listed below are part of the repository; everything else
+# at the top level (old scripts, paper sources, local data) is ignored.
+/*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/README_pypi.md
+!/pyproject.toml
+!/quick_demo.ipynb
+!/fame_qp/
+!/tests/
+!/examples/
+!/experiments/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Experiments: fetched baselines and generated output. The raw results in
+# experiments/data/*/raw/ are tracked; everything made from them is not.
+experiments/external/
+experiments/data/*/processed/
+experiments/data/*/tables/
+experiments/data/*/figures/
+experiments/data/*/raw/*.log
+experiments/data_rerun/
+experiments/baselines/cudampc/*.so

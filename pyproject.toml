@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fame-qp"
+version = "0.2.0"
+description = "GPU-accelerated QP solver for real-time model predictive control"
+readme = "README_pypi.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Santosh Mohan Rajkumar" },
+    { name = "Debdipta Goswami" },
+    { name = "Stephanie Stockar" },
+]
+dependencies = [
+    "numpy",
+    "torch>=2.1",
+    "triton",
+]
+
+[project.optional-dependencies]
+mpc = ["scipy"]
+test = ["pytest", "scipy"]
+
+[project.urls]
+Homepage = "https://github.com/santoshrajkumar/fame-qp"
+
+[tool.setuptools]
+packages = ["fame_qp", "fame_qp.utils"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
