@@ -5,12 +5,11 @@
 !/.github/
 !/LICENSE
 !/README.md
-!/README_pypi.md
 !/pyproject.toml
-!/quick_demo.ipynb
 !/fame_qp/
 !/tests/
 !/examples/
+!/data_repo/
 !/experiments/
 
 # Python

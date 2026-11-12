@@ -1,158 +1,300 @@
-# fame_qp — GPU QP solver for MPC with automatic execution mode
+<h1 align="center">FAME&#8209;QP</h1>
+
+<p align="center">
+  <b>Fused ADMM with Multimode Execution: a GPU QP solver for real-time model predictive control</b><br>
+  Dense convex QPs solved on the GPU with fused kernels, CUDA-graph replay and automatic tuning to your device.
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/fame-qp/"><img alt="PyPI" src="https://img.shields.io/pypi/v/fame-qp.svg?color=3776AB&logo=pypi&logoColor=white"></a>
+  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white">
+  <img alt="GPU: CUDA | Triton" src="https://img.shields.io/badge/GPU-CUDA%20%7C%20Triton-76B900?logo=nvidia&logoColor=white">
+  <a href="https://github.com/santoshrajkumar/fame-qp/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="https://arxiv.org/abs/2611.13766"><img alt="arXiv:2611.13766" src="https://img.shields.io/badge/arXiv-2611.13766-b31b1b.svg"></a>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/santoshrajkumar/fame-qp/main/data_repo/g1_push_recovery.gif" alt="Unitree G1 recovering from an 80 N push under MPC solved by FAME-QP" width="37%">
+  <img src="https://raw.githubusercontent.com/santoshrajkumar/fame-qp/main/data_repo/x2_lemniscate.gif" alt="Skydio X2 tracking a lemniscate with KQ-LMPC solved by FAME-QP" width="61%">
+</p>
+<p align="center"><sub><b>Left:</b> Unitree G1 humanoid in MuJoCo recovering from an 80&nbsp;N push; its 290-variable MPC QP is solved every 2&nbsp;ms. <b>Right:</b> Skydio X2 tracking a lemniscate with KQ&#8209;LMPC; the QP's matrices change at every 20&nbsp;ms step. Red: reference, yellow: flown path.</sub></p>
+
+---
+
+## What this is
+
+FAME&#8209;QP solves convex quadratic programs
 
 ```
-min_z  ½ zᵀPz + qᵀz     s.t.   l ≤ G z ≤ h          (P ∈ S₊ⁿ, G ∈ ℝ^{m×n})
+minimize    ½ zᵀPz + qᵀz
+subject to  l ≤ Gz ≤ h
 ```
+
+on NVIDIA GPUs, with the dense QPs of linear MPC as the target. It runs the
+ADMM iteration of OSQP with pre-inverted linear systems, and is built around how
+that iteration executes on a GPU:
+
+- **Constraint-dependent operators.** Constraint rows that act on single
+  variables (input bounds, for example) are handled element-wise instead of as
+  dense rows. This cuts operator storage by up to 4&times; and iteration time
+  by up to 3&times; compared with treating every row as dense.
+- **Fused single- and two-kernel iterations, replayed in CUDA graphs.** A whole
+  ADMM iteration runs in one or two kernels, and blocks of iterations with the
+  stopping test are replayed with a single host call.
+- **Automatic selection.** A one-time device calibration and a short timing
+  test per problem shape choose the execution mode, its tile sizes and,
+  optionally, the precision.
+- **Penalty probing and lazy updates.** A bank of pre-inverted operators gives
+  penalty adaptation without refactorisation and a probed starting penalty;
+  when the QP matrices change, only the operator in use is re-inverted.
+
+The method and experiments are described in the
+[paper](https://arxiv.org/abs/2611.13766).
+
+<p align="center">
+  <a href="https://github.com/santoshrajkumar/fame-qp/blob/main/examples/quick_demo.ipynb"><img alt="Quick demo: the paper's figures and live GPU runs in one notebook" src="https://img.shields.io/badge/%E2%96%B6%20QUICK%20DEMO-Paper%20figures%20%2B%20live%20GPU%20runs-F37626?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=1F2937"></a><br>
+  <sub>The paper's figures and tables, regenerated from the saved results, and the experiments running live on your GPU.</sub>
+</p>
+
+## Results
+
+From the paper, on an RTX 3080 Laptop GPU in `float64`:
+
+| Benchmark | FAME&#8209;QP |
+|---|---|
+| **Random dense QPs**, n = 20&ndash;1400, matched accuracy | Fastest GPU solver at every size, and faster than every CPU solver for n &ge; 220: 1.5&ndash;4.3&times; faster than ReLU-QP and 1.2&ndash;25.9&times; faster than DAQP |
+| **Closed-loop MPC on random linear systems**, n = 400&ndash;2000 | 0.66&ndash;4.2 ms per step: 3.2&ndash;7.3&times; faster than ReLU-QP and 3.2&ndash;13.8&times; faster than &pi;MPC |
+| **Unitree G1 push recovery**, 2 ms control period | 2.3&ndash;3.1&times; faster than ReLU-QP; stays within the period up to a horizon of N = 20, where ReLU-QP manages N = 10 |
+| **Skydio X2 KQ&#8209;LMPC**, QP matrices change every step | 12.5 ms against 59.2 ms for CuPIQP (4.7&times;), with a 99th percentile of 17.6 ms within the 20 ms period |
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/santoshrajkumar/fame-qp/main/data_repo/fig_random_qp.png" alt="Solve time against problem size on random dense QPs" width="70%">
+</p>
+<p align="center"><sub>Cold-solve times on dense random QPs at matched accuracy, excluding setup: medians with min&ndash;max bands over five instances. All solvers in <code>float64</code> except cuOSQP (<code>float32</code>).</sub></p>
+
+<table align="center" width="100%">
+  <tr>
+    <td width="55%" align="center">
+      <img src="https://raw.githubusercontent.com/santoshrajkumar/fame-qp/main/data_repo/fig_g1_push_recovery.png" width="100%" alt="Unitree G1 push recovery frames"><br>
+      <sub><b>Unitree G1</b>: push, largest lean, return and final stance.</sub>
+    </td>
+    <td width="45%" align="center">
+      <img src="https://raw.githubusercontent.com/santoshrajkumar/fame-qp/main/data_repo/fig_x2_lemniscate.png" width="100%" alt="Skydio X2 lemniscate tracking"><br>
+      <sub><b>Skydio X2</b>: 20 s of lemniscate tracking, 2.7 mm RMSE.</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
+## The paper
+
+> **FAME-QP: A GPU-Accelerated Quadratic-Programming Solver for Real-Time Model Predictive Control**<br>
+> S. M. Rajkumar, D. Goswami and S. Stockar<br>
+> [arXiv:2611.13766](https://arxiv.org/abs/2611.13766), 2026.
+
+```bibtex
+@misc{rajkumar2026fameqp,
+  title         = {{FAME-QP}: A {GPU}-Accelerated Quadratic-Programming Solver for Real-Time Model Predictive Control},
+  author        = {Rajkumar, Santosh Mohan and Goswami, Debdipta and Stockar, Stephanie},
+  year          = {2026},
+  eprint        = {2611.13766},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.RO},
+  url           = {https://arxiv.org/abs/2611.13766}
+}
+```
+
+If you use FAME&#8209;QP, please cite the paper.
+
+---
 
 ## Installation
 
 ```bash
-pip install -e .            # requires a CUDA GPU, PyTorch and Triton
+pip install fame-qp
 ```
 
-## Usage
+Requires Linux, an NVIDIA GPU supported by Triton, Python 3.9+, and PyTorch with
+CUDA (Triton comes with it). If you need a particular CUDA build of PyTorch,
+install it from [pytorch.org](https://pytorch.org) first.
+
+From source:
+
+```bash
+git clone https://github.com/santoshrajkumar/fame-qp.git
+cd fame-qp
+pip install -e .
+```
+
+---
+
+## Quick start
 
 ```python
 from fame_qp import QP, Solver
-qp  = QP.create(P, q, G, l, h, device="cuda")      # G=None means G = I
-sol = Solver(qp, eps_abs=1e-4, eps_rel=1e-4)        # calibrates / selects at setup
-res = sol.solve()
-res.z, res.s, res.lam, res.status, res.info["mode"], res.info["precision"]
 
-sol.update(q=q2, l=l2, h=h2)       # MPC loop: last iterate and rho carry over
-sol.update_matrices(P=P2, G=G2)    # same structure; bank re-inverted in place
-sol.warm_start_shifted([(0, n_u, N)],                   # z = col(u_0..u_{N-1})
-                       [(0, n_b, N), (n_b * N, n_u, N)])  # row groups, by stage
+qp = QP.create(P, q, G, l, h, device="cuda")       # G=None means l <= z <= h
+solver = Solver(qp, precision="float64", eps_abs=1e-4, eps_rel=1e-4)
+res = solver.solve()
+res.z, res.lam, res.status, res.iters, res.info["mode"]
+
+solver.update(q=q2, l=l2, h=h2)       # new data: setup and last solution are reused
+solver.update_matrices(P=P2, G=G2)    # new matrices with the same constraint structure
+res = solver.solve()
 ```
 
-**Shifted warm start.** In receding-horizon control the next QP is the last one
-moved one stage along the horizon, so the best starting point is the last
-solution shifted by one stage (stage k+1 becomes stage k, the last stage is
-held). `warm_start_shifted(z_segments, lam_segments)` does this for the primal
-and the duals; a segment `(start, size, count)` is `count` stages of `size`
-entries. Call it after `update` / `update_matrices`: the copy `s` is rebuilt
-from the current `G`, `l`, `h`. `MPCController` uses it by default
-(`shift=True`, segments from `LinearMPC.stage_segments()`).
-
-LMPC (condensed, `G = [𝓑; I]`, optional LQR pre-stabilisation, sparse form for references):
+Linear MPC in condensed form, with shifted warm starts:
 
 ```python
 from fame_qp.mpc import LinearMPC
-mpc  = LinearMPC(A, B, Q, R, Q_N, N=40, u_lo=-1, u_hi=1, x_lo=-2, x_hi=2)
-ctrl = mpc.controller(x_hat)
-u0   = ctrl.step(x_hat)
+
+mpc = LinearMPC(A, B, Q, R, Q_N, N=40, u_lo=-1, u_hi=1, x_lo=-2, x_hi=2)
+ctrl = mpc.controller(x, precision="float64")
+for _ in range(steps):
+    u = ctrl.step(x)                  # updates the QP for x, warm starts and solves
+    x = A @ x + B @ u
 ```
 
-## Benchmark problems
+The first setup on a new GPU calibrates it (about a second), and the result is
+cached for later runs.
 
-`fame_qp.utils` generates the random problems used in the paper, seeded as in ReLU-QP:
+### Examples
+
+| | |
+|---|---|
+| [`examples/usage.py`](https://github.com/santoshrajkumar/fame-qp/blob/main/examples/usage.py) | The basic API: a QP, its solution and multipliers, updates between solves, box constraints and a small MPC loop |
+| [`examples/demo.py`](https://github.com/santoshrajkumar/fame-qp/blob/main/examples/demo.py) | A random QP with n = 1000, closed-loop MPC on a random linear system, and the same MPC with A and B changing at every step |
+| [`examples/quick_demo.ipynb`](https://github.com/santoshrajkumar/fame-qp/blob/main/examples/quick_demo.ipynb) | The paper's figures and tables from the saved results, plus live runs of the experiments on your GPU |
+
+`fame_qp.utils` generates the paper's benchmark problems, seeded as in ReLU-QP:
 
 ```python
 from fame_qp.utils import random_qp, random_lmpc
 
 qp = QP.create(**random_qp(n=400, seed=0))   # n/4 dense equalities, n/4 one-sided inequalities
-
-prob = random_lmpc(n_u=10, N=40)             # n_x = 3 n_u, LQR-preconditioned condensed QP
-x = prob.initial_state()                     # paper's initial-state scale for n_u
-sol = Solver(prob.qp(x), precision="float64", eps_abs=1e-3, eps_rel=1e-3)
-u0 = prob.first_input(sol.solve().z.cpu().numpy(), x)
-x = prob.step(x, u0)
+prob = random_lmpc(n_u=10, N=40)             # LQR-preconditioned condensed LMPC, n_x = 3 n_u
 ```
 
-## Example
+---
 
-[`examples/demo.py`](examples/demo.py) solves a random QP with n = 1000, runs
-closed-loop MPC on a random linear system, and runs the same MPC with A and B
-changing at every step, using `update_matrices`:
+## How it works
 
-```bash
-python examples/demo.py
+Each ADMM iteration, in the form used by OSQP, is
+
+```
+z~   = M (σz − q + Gᵀ(ρ∘s − λ)),     M = (P + σI + Gᵀ diag(ρ) G)⁻¹
+z    = α z~ + (1 − α) z
+ζ    = α G z~ + (1 − α) s + ρ⁻¹∘λ
+s    = clip(ζ, l, h),     λ = ρ∘(ζ − s)
 ```
 
-## Notation in the code
+and the solve stops when the unscaled primal and dual residuals fall below
+`eps_abs + eps_rel × scale`. The rows of G are split into diagonal rows and dense
+rows, giving three **structures**: *box* (`G = diag(d)`), *split*
+(`G = [diag(d); C]` or `[C; diag(d)]`) and *general*.
 
-| Symbol | Code | Meaning |
-|---|---|---|
-| z, P, q, G, l, h | `z, P, q, G, l, h` | the QP above |
-| s = G z | `s` | ADMM copy of the constrained quantities |
-| λ | `lam` | Lagrange multiplier of l ≤ G z ≤ h (dual of s = G z); `lambda` is reserved in Python |
-| ρ, σ, α | `rho, sigma, alpha` | penalty, regularisation, relaxation |
-| K = P + σI + Gᵀdiag(ρ)G, M = K⁻¹ | | pre-inverted for a bank of ρ |
-| diag(d), C | `d, C` | diagonal rows and dense rows of G (n_d = n or 0, m_c rows) |
-| 𝒜, 𝓑, 𝒬, ℛ | `Acal, Bcal, Qcal, Rcal` | condensing matrices (`mpc.py`) |
+<details>
+<summary><b>Execution modes</b></summary>
 
-The ADMM paragraph of the paper still uses x, z, A, u for z, s, G, h.
-
-Structures, detected from G: **box** `G = diag(d)`; **split** `G = [C; diag(d)]`
-or `[diag(d); C]`; **general** otherwise (`C = G`).
-
-## Execution modes
-
-| Mode | Role of the CUDA graph |
+| Mode | Iteration |
 |---|---|
-| **Persistent-kernel solve** (`persistent`) | Not used for looping: the whole solve is one kernel launch (box structure, tile within the register file). A one-node graph only cuts the launch cost; ρ adapts between launches of `persistent_budget` iterations |
-| **Single-kernel iteration** (`single_kernel`) | Replays a block of `check_interval` iterations, one kernel each, then the on-device stopping test |
-| **Two-kernel iteration** (`two_kernel`) | Replays a block of iterations, two dependent kernels each, then the on-device stopping test |
+| `single_kernel` | One kernel per iteration on the stacked operator `W = S M Sᵀ`, `S = [I; C]`, with (n+m_c)² entries. Blocks of `check_interval` iterations and the on-device stopping test are replayed as a CUDA graph. |
+| `two_kernel` | Two dependent kernels per iteration on the factored operator `[M, M Cᵀ]` plus `C`: n(n+2m_c) entries, exactly m_c² fewer, for one more launch. Replayed the same way. |
+| `persistent` | Box structure, small n: the whole solve in one kernel launch with the operator held in registers. The penalty adapts between launches. |
 
-Operators (`operator.py`): single-kernel `W = S M Sᵀ`, `S = [I; C]`, size (n+m_c)²;
-two-kernel `[M, M Cᵀ]` plus `C`, n(n+2m_c) values. They differ by exactly m_c²
-values per iteration, against one kernel launch.
+`mode="auto"` (default) chooses; force a mode with `Solver(qp, mode=...)`.
+</details>
 
-## Automatic selection (`mode="auto"`, default)
+<details>
+<summary><b>Automatic selection</b></summary>
 
-1. **Calibration, once per device and precision** (`calibration.py`, ~1 s with
-   Triton's compile cache warm): graph-node cost τ, host-read cost, streaming
-   time vs operator size (captures L2 vs DRAM), and for the persistent kernel
-   the registers/spills reported by the compiler per tile, giving the largest
-   spill-free tile on this GPU.
-2. **Setup test, once per problem shape**: predict single vs two kernels from
-   the calibration, drop candidates > 1.5× the best prediction or whose bank
-   does not fit in memory, time the rest on placeholder operators of the real
-   shape (tiles tuned), keep the single kernel unless two kernels win by > 10 %.
-3. **Persistent vs graph replay**: predicted solve time from the iteration count
-   of the ρ probe. If the persistent mode wins, its starting ρ is re-probed for
-   its schedule (ρ can only change between launches) and the comparison redone.
+1. **Calibration**, once per device and precision (about a second): the cost of a
+   kernel node in a replayed graph, of a host read, and of streaming operators of
+   0.25&ndash;64 MB, plus the largest persistent-kernel tile that does not spill
+   registers.
+2. **Setup test**, once per problem shape: both forms are predicted from the
+   calibration; forms that do not fit in memory or are predicted more than
+   1.5&times; slower than the best are dropped, and the rest are timed on
+   placeholder operators with their tiles tuned. The single kernel is kept
+   unless two kernels are more than 10 % faster.
+3. **Persistent kernel or graph replay**, from the predicted solve time using the
+   iteration count of the penalty probe.
+</details>
 
-Force a mode with `Solver(qp, mode="persistent" | "single_kernel" | "two_kernel")`.
+<details>
+<summary><b>Precision</b></summary>
 
-## Precision
+`precision="float32"` (default), `"float64"` or `"auto"`. With `"auto"`, κ(K) is
+estimated by power iterations: `u₃₂κ ≤ 0.01ε` selects float32 and `u₃₂κ ≥ ε`
+float64; in between, both precisions are probed and the one with the shorter
+predicted solve wins, preferring float64 within 20 %. The operators are always inverted
+in float64.
+</details>
 
-`precision="float32"` (default), `"float64"`, or `"auto"` (optional, two stages):
+<details>
+<summary><b>Penalty bank and updates</b></summary>
 
-1. κ(K) by power iterations on K and K⁻¹ (float64). `u₃₂κ ≤ 0.01ε` → float32;
-   `u₃₂κ ≥ ε` → float64; otherwise stage 2.
-2. Probe in both precisions; drop one that does not reach ε; take the shorter
-   predicted solve, preferring float64 within `precision_margin` (20 %).
+Operators are pre-inverted for five penalties ρ spaced by factors of 10, so
+OSQP's residual-balancing adaptation switches operators instead of
+refactorising. At setup, each penalty is probed with a short trial solve, and
+the bank is re-centred if the best start is at an end; in the split structure
+the ratio between the dense-row and diagonal-row penalties is probed as well.
+`update` changes q and the bounds; `update_matrices` replaces P or G and
+re-inverts the bank, or only the operator in use with `lazy_update=True`.
+`warm_start_shifted` shifts the last solution one stage along the horizon.
+</details>
 
-Mode is selected per precision (float64 changes the persistent limit and the
-crossover). The bank is always inverted in float64.
+<details>
+<summary><b>Cache</b></summary>
 
-## Penalty selection
+Calibrations and mode choices are stored in `$FAME_QP_CACHE`, else
+`$XDG_CACHE_HOME/fame_qp`, else `~/.cache/fame_qp`, keyed by the GPU, driver,
+CUDA, Triton and FAME&#8209;QP versions. `fame_qp.clear_cache()` forgets them;
+`Solver(qp, retune=True)` measures again.
+</details>
 
-Probe trials adapt ρ as the solve does and record when the test passes at
-`probe_tighten`×, √`probe_tighten`× and 1× the tolerance; candidates are compared
-at the tightest level some candidate reached. The bank is re-centred when the
-best start is at an end. In the split structure γ = ρ_dense/ρ_diag is searched
-at the probed ρ, then ρ is probed again.
-
-## Cache
-
-`$FAME_QP_CACHE`, else `$XDG_CACHE_HOME/fame_qp`, else `~/.cache/fame_qp`:
-`calibration.json` (per device: GPU, compute capability, driver, CUDA, Triton,
-package version) and `modes.json` (per device, precision and problem shape).
-Read once per process at the first setup; never touched by `solve`. Atomic,
-file-locked writes; in memory only if the directory is not writable.
-`fame_qp.clear_cache()` forgets everything; `Settings(retune=True)` re-measures.
-
-## Tests
-
-```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q tests     # 48 tests
-```
+---
 
 ## Reproducing the paper
 
-[`quick_demo.ipynb`](quick_demo.ipynb) regenerates the figures and tables of the
-experimental results from the saved benchmark results, and runs short versions
-of the experiments live on your GPU. The benchmark
-scripts and the setup of the baselines are in [`experiments/`](experiments/README.md).
+[`examples/quick_demo.ipynb`](https://github.com/santoshrajkumar/fame-qp/blob/main/examples/quick_demo.ipynb)
+regenerates the figures and tables of the experimental results from the saved
+benchmark results, and runs short versions of the experiments live. The
+benchmark scripts, the pinned baselines and their setup are in
+[`experiments/`](https://github.com/santoshrajkumar/fame-qp/blob/main/experiments/README.md).
+
+Tests, which need a CUDA GPU and Clarabel:
+
+```bash
+pip install -e ".[test]"
+python -m pytest -q tests
+```
+
+---
+
+## Repository layout
+
+```
+fame_qp/                  the solver
+├── problem.py            QP data and constraint-structure detection
+├── scaling.py            Ruiz equilibration
+├── operator.py           pre-inverted operator bank
+├── kernels.py            Triton kernels: iterations, stopping test
+├── calibration.py        device calibration and mode selection
+├── solver.py             Solver, Settings, Result
+├── warmstart.py          shifted warm starts
+├── mpc.py                condensed linear MPC
+└── utils/                benchmark problem generators
+
+examples/                 usage.py, demo.py, quick_demo.ipynb
+experiments/              the paper's benchmarks and baselines
+tests/                    unit tests
+data_repo/                figures and animations for this page
+```
+
+## License
+
+MIT &mdash; see [LICENSE](https://github.com/santoshrajkumar/fame-qp/blob/main/LICENSE).
+
+<p align="center"><sub>Go Buckeyes! 🌰</sub></p>

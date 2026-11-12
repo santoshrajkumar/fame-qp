@@ -44,8 +44,8 @@ python experiments/g1_balance/g1_balance_gpu.py
 
 Results are written to `experiments/data/<experiment>/`: raw results in
 `raw/`, and the processed CSV files, tables and figures made from them. The
-raw results behind the paper are included, and `quick_demo.ipynb` in the
-repository root regenerates the paper's figures and tables from them. Timings
+raw results behind the paper are included, and `examples/quick_demo.ipynb`
+regenerates the paper's figures and tables from them. Timings
 depend on the GPU; the paper used an RTX 3080 Laptop GPU.
 
 FAME-QP keeps its device calibration in `~/.cache/fame_qp`. Set
