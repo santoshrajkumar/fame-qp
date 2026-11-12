@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fame-qp"
 version = "0.2.0"
-description = "GPU-accelerated QP solver for real-time model predictive control"
+description = "GPU QP solver for fast, real-time model predictive control (linear, Koopman and world-model MPC)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -14,6 +14,20 @@ authors = [
     { name = "Santosh Mohan Rajkumar" },
     { name = "Debdipta Goswami" },
     { name = "Stephanie Stockar" },
+]
+keywords = [
+    "GPU", "QP solver", "quadratic programming", "model predictive control", "MPC",
+    "linear MPC", "LMPC", "real-time MPC", "ADMM", "CUDA", "Triton", "PyTorch",
+    "Koopman", "world model", "robotics", "optimization",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
     "numpy",
@@ -26,7 +40,10 @@ mpc = ["scipy"]
 test = ["pytest", "scipy", "clarabel"]
 
 [project.urls]
-Homepage = "https://github.com/santoshrajkumar/fame-qp"
+Homepage = "https://santoshrajkumar.github.io/proj/fame_qp/"
+Repository = "https://github.com/santoshrajkumar/fame-qp"
+Paper = "https://arxiv.org/abs/2611.13766"
+Issues = "https://github.com/santoshrajkumar/fame-qp/issues"
 
 [tool.setuptools]
 packages = ["fame_qp", "fame_qp.utils"]

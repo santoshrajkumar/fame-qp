@@ -11,6 +11,7 @@
   <img alt="GPU: CUDA | Triton" src="https://img.shields.io/badge/GPU-CUDA%20%7C%20Triton-76B900?logo=nvidia&logoColor=white">
   <a href="https://github.com/santoshrajkumar/fame-qp/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
   <a href="https://arxiv.org/abs/2611.13766"><img alt="arXiv:2611.13766" src="https://img.shields.io/badge/arXiv-2611.13766-b31b1b.svg"></a>
+  <a href="https://santoshrajkumar.github.io/proj/fame_qp/"><img alt="Project page" src="https://img.shields.io/badge/project-page-ba0c2f.svg"></a>
 </p>
 
 <p align="center">
@@ -31,7 +32,7 @@ subject to  l ≤ Gz ≤ h
 ```
 
 on NVIDIA GPUs, with the dense QPs of linear MPC as the target. It runs the
-ADMM iteration of OSQP with pre-inverted linear systems, and is built around how
+ADMM iteration with pre-inverted linear systems, and is built around how
 that iteration executes on a GPU:
 
 - **Constraint-dependent operators.** Constraint rows that act on single
